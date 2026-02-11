@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true"
+    android:background="#FFF6FF">
+
+    <!-- 数字人区域：占据上方大部分空间 -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <WebView
+            android:id="@+id/webViewAvatar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@android:color/transparent" />
+    </FrameLayout>
+
+    <!-- 输入区域固定在底部，样式更轻盈 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:background="#FFFFFFFF"
+        android:elevation="6dp">
+
+        <EditText
+            android:id="@+id/editTextSay"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="输入要让数字人说的话…"
+            android:imeOptions="actionDone"
+            android:maxLines="2"
+            android:inputType="textMultiLine"
+            android:padding="10dp"
+            android:background="@android:color/transparent" />
+
+        <Button
+            android:id="@+id/buttonSay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="说话" />
+    </LinearLayout>
+
+</LinearLayout>
+

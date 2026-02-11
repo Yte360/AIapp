@@ -1,0 +1,54 @@
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: ${CONTAINER_NAME:-minio-server}
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPUS:-2.0}'
+          memory: ${MEMORY_LIMIT:-4096MB}
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    ports:
+      - "${API_PORT:-9000}:9000"      # S3 API 端口
+      - "${WEB_HTTP_PORT:-9889}:9001" # Web 控制台端口
+    restart: always
+    command: "server /data --console-address :9001 --address :9000"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BROWSER_SESSION_DURATION: ${MINIO_BROWSER_SESSION_DURATION:-12h}
+      MINIO_BROWSER: ${MINIO_BROWSER:-on}
+      MINIO_BROWSER_LOGIN_ANIMATION: ${MINIO_BROWSER_LOGIN_ANIMATION:-on}
+      MINIO_SERVER_URL: ${MINIO_SERVER_URL:-http://localhost:9000}
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL:-http://localhost:9889}
+      MINIO_SITE_REGION: ${MINIO_SITE_REGION:-cn-east-1}
+      MINIO_SITE_NAME: ${MINIO_SITE_NAME:-shanghai-production}
+      TZ: ${TZ:-Asia/Shanghai}
+    logging:
+      driver: json-file
+      options:
+        max-size: "5M"
+        max-file: "10"
+    volumes:
+      - ${APP_PATH:-./miniodata}/data:/data
+      - ${APP_PATH:-./miniodata}/ssl:/root/.minio/certs
+      # 时区挂载（Linux/macOS 使用，Windows 请注释掉）
+      - /usr/share/zoneinfo:/usr/share/zoneinfo:ro
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+      createdBy: "chat_app"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    # 如果需要使用外部网络，取消下面的注释
+    # networks:
+    #   - ayy_net
+
+# 如果需要使用外部网络，取消下面的注释并确保网络已创建
+# networks:
+#   ayy_net:
+#     external: true

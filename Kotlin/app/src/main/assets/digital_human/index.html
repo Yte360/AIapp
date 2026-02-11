@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Digital Human (2D)</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #f6f0ff; /* 柔和的浅紫色，和人物背景更协调 */
+        color: #222;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+      #hud {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        top: 16px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        z-index: 2;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.9);
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15);
+      }
+      #status {
+        flex: 1;
+        font-size: 12px;
+        color: #4b5563;
+      }
+      button {
+        background: linear-gradient(135deg, #6366f1, #a855f7);
+        color: #fff;
+        border: none;
+        padding: 6px 14px;
+        border-radius: 999px;
+        font-size: 13px;
+      }
+      #c {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hud">
+      <div id="status">初始化中…</div>
+      <button id="btnNod">点头</button>
+    </div>
+    <canvas id="c"></canvas>
+    <script src="./avatar2d.js"></script>
+  </body>
+</html>
+

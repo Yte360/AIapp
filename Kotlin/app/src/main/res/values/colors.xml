@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- Brand -->
+    <color name="brand_primary">#19C4E9</color>
+
+    <!-- Question module palette -->
+    <color name="primary_blue">#19C4E9</color>
+    <color name="primary_blue_light">#4DD5F1</color>
+    <color name="background_gray">#F5F5F5</color>
+    <color name="text_dark">#333333</color>
+
+    <!-- Cyber theme (SmartAnalysis) -->
+    <color name="cyber_bg">#0B1020</color>
+    <color name="cyber_surface">#111A2E</color>
+    <color name="cyber_surface_2">#0F1730</color>
+    <color name="cyber_border">#2A3A5E</color>
+    <color name="cyber_text">#EAF2FF</color>
+    <color name="cyber_muted">#9FB2D6</color>
+    <color name="cyber_neon">#19C4E9</color>
+    <color name="cyber_neon_2">#8A5CFF</color>
+    <color name="cyber_neon_3">#00E5FF</color>
+    <color name="cyber_success">#00E676</color>
+    <color name="cyber_warn">#FFC400</color>
+    <color name="cyber_danger">#FF5252</color>
+</resources>

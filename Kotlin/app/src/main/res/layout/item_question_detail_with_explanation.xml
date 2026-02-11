@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="16dp"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="2dp"
+    app:cardUseCompatPadding="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- 题目编号和状态 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvQuestionNum"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="第1题"
+                android:textColor="@color/primary_blue"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvQuestionStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/status_bg_correct"
+                android:paddingStart="8dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="4dp"
+                android:text="✅ 正确"
+                android:textColor="@color/white"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- 题目内容 -->
+        <TextView
+            android:id="@+id/tvQuestionContent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:background="#F5F7FA"
+            android:lineSpacingExtra="4dp"
+            android:padding="12dp"
+            android:text="题目: 下列排序算法中，平均时间复杂度为O(n log n)的是？"
+            android:textColor="@color/text_dark"
+            android:textSize="15sp" />
+
+        <!-- 选项列表 -->
+        <LinearLayout
+            android:id="@+id/layoutOptions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:orientation="vertical"
+            android:padding="8dp"
+            android:background="#F8F9FA">
+
+            <!-- 选项A -->
+            <TextView
+                android:id="@+id/tvOptionA"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
+                android:text="A. 冒泡排序"
+                android:textColor="@color/text_dark"
+                android:textSize="14sp" />
+
+            <!-- 选项B -->
+            <TextView
+                android:id="@+id/tvOptionB"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
+                android:text="B. 插入排序"
+                android:textColor="@color/text_dark"
+                android:textSize="14sp" />
+
+            <!-- 选项C -->
+            <TextView
+                android:id="@+id/tvOptionC"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
+                android:text="C. 快速排序"
+                android:textColor="@color/text_dark"
+                android:textSize="14sp" />
+
+            <!-- 选项D -->
+            <TextView
+                android:id="@+id/tvOptionD"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="D. 选择排序"
+                android:textColor="@color/text_dark"
+                android:textSize="14sp" />
+
+        </LinearLayout>
+
+        <!-- 用户答案 -->
+        <TextView
+            android:id="@+id/tvUserAnswer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:background="@color/background_gray"
+            android:padding="8dp"
+            android:text="👤 你的答案: C. 快速排序"
+            android:textColor="@color/text_dark"
+            android:textSize="14sp" />
+
+        <!-- 正确答案 -->
+        <TextView
+            android:id="@+id/tvCorrectAnswer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:background="#E8F5E9"
+            android:padding="8dp"
+            android:text="✅ 正确答案: C. 快速排序"
+            android:textColor="@color/text_dark"
+            android:textSize="14sp" />
+
+        <!-- 分隔线 -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginBottom="12dp"
+            android:background="#EEEEEE" />
+
+        <!-- 解析 -->
+        <TextView
+            android:id="@+id/tvExplanation"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="#F8F9FA"
+            android:lineSpacingExtra="6dp"
+            android:padding="12dp"
+            android:text="💡 解析: 快速排序的平均时间复杂度为O(n log n)，是最快的排序算法之一"
+            android:textColor="@color/text_dark"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+
+</androidx.cardview.widget.CardView>

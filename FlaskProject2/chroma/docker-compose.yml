@@ -1,0 +1,16 @@
+# ChromaDB Docker Compose 配置文件
+# 用于启动一个独立的 ChromaDB 服务
+
+services:
+  chroma:
+    image: chromadb/chroma:1.4.1
+    container_name: chroma-server
+    ports:
+      - "${CHROMA_PORT:-8000}:8000"  # Chroma API 端口
+    volumes:
+      - ${CHROMA_DATA_PATH:-./chromadata}:/data  # 数据持久化目录
+    restart: unless-stopped
+    environment:
+      # 允许匿名访问，方便开发。生产环境建议配置认证。
+      ALLOW_ANONYMOUS_ACCESS: "true"
+   

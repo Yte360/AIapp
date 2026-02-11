@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <SwitchPreferenceCompat
+        android:key="dark_mode"
+        android:title="深色模式"
+        android:summary="开启后应用将使用深色主题" />
+
+    <PreferenceCategory
+        android:title="显示">
+
+        <ListPreference
+            android:key="font_size"
+            android:title="字体大小"
+            android:entries="@array/font_size_entries"
+            android:entryValues="@array/font_size_values"
+            android:defaultValue="medium" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

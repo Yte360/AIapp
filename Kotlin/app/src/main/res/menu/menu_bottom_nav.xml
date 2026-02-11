@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/menu_quiz"
+        android:title="刷题"
+        android:icon="@android:drawable/ic_menu_edit" />
+
+    <item
+        android:id="@+id/menu_health"
+        android:title="健康"
+        android:icon="@android:drawable/ic_menu_agenda" />
+
+    <item
+        android:id="@+id/menu_rag"
+        android:title="问答"
+        android:icon="@android:drawable/ic_menu_help" />
+
+    <item
+        android:id="@+id/menu_profile"
+        android:title="我的"
+        android:icon="@android:drawable/ic_menu_myplaces" />
+</menu>
