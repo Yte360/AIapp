@@ -3,8 +3,12 @@ import tempfile
 from datetime import datetime
 from io import BytesIO
 
-from minio import Minio
-from minio.error import S3Error
+try:
+    from minio import Minio
+    from minio.error import S3Error
+except ImportError:
+    Minio = None
+    S3Error = None
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
@@ -16,6 +20,9 @@ def _bool_env(name: str, default: bool = False) -> bool:
 
 class MinIOStorage:
     def __init__(self):
+        if Minio is None:
+            raise RuntimeError("MinIO 库未安装")
+            
         self.endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
         self.access_key = os.getenv("MINIO_ACCESS_KEY")
         self.secret_key = os.getenv("MINIO_SECRET_KEY")

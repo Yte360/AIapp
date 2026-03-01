@@ -14,7 +14,7 @@ object Config {
     private const val USE_REAL_DEVICE = true  // 改为 true 使用真机地址，false 使用模拟器地址
 
     // 真机地址（需要根据你的实际网络环境修改）
-    private const val REAL_DEVICE_HOST = "192.168.1.26"  // 你的电脑 IP 地址
+    private const val REAL_DEVICE_HOST = "192.168.43.37"  // 你的电脑 IP 地址
 
     // 模拟器地址
     private const val EMULATOR_HOST = "10.0.2.2"

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.util.Log
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -29,15 +30,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication3.viewmodel.CameraViewModel
-import com.example.myapplication3.data.FaceExpression
+import com.example.myapplication3.data.FaceAnalyzer
 import com.example.myapplication3.data.MentalState
+import com.example.myapplication3.data.FaceExpression
 import com.example.myapplication3.data.OverallState
-import com.google.accompanist.permissions.*
-import kotlinx.coroutines.delay
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.PermissionStatus
+import com.google.accompanist.permissions.rememberPermissionState
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.Executors
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -47,7 +52,6 @@ fun CameraScreen(
     val context = LocalContext.current
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
 
-    // 检查权限状态
     when (cameraPermissionState.status) {
         is PermissionStatus.Granted -> {
             CameraContent(onBack = onBack, context = context)
@@ -60,7 +64,7 @@ fun CameraScreen(
     }
 }
 
-@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CameraContent(
     onBack: () -> Unit,
@@ -70,17 +74,54 @@ fun CameraContent(
     val state by viewModel.state.collectAsState()
     val expressions by viewModel.expressions.collectAsState()
     val mentalState by viewModel.mentalState.collectAsState()
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val scope = rememberCoroutineScope()
 
     var previewView: PreviewView? by remember { mutableStateOf(null) }
+    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-    // 模拟定期分析（每3秒一次）
-    LaunchedEffect(state.isCameraReady) {
-        while (state.isCameraReady) {
-            delay(3000)
-            if (!state.isAnalyzing) {
-                viewModel.analyzeFrame()
+    DisposableEffect(Unit) {
+        onDispose {
+            cameraExecutor.shutdown()
+        }
+    }
+
+    LaunchedEffect(previewView, state.isCameraReady) {
+        if (previewView != null && state.isCameraReady) {
+            try {
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+                cameraProviderFuture.addListener({
+                    val cameraProvider = cameraProviderFuture.get()
+
+                    val preview = Preview.Builder().build()
+                    preview.setSurfaceProvider(previewView?.surfaceProvider)
+
+                    val imageAnalysis = ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+
+                    val faceAnalyzer = FaceAnalyzer(
+                        onFaceDetected = { expression ->
+                            viewModel.onFaceDetected(expression)
+                        },
+                        onNoFaceDetected = {
+                            viewModel.onNoFaceDetected()
+                        }
+                    )
+
+                    imageAnalysis.setAnalyzer(cameraExecutor, faceAnalyzer)
+
+                    val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
+
+                    cameraProvider.unbindAll()
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        cameraSelector,
+                        preview,
+                        imageAnalysis
+                    )
+                }, ContextCompat.getMainExecutor(context))
+            } catch (e: Exception) {
+                Log.e("CameraScreen", "相机初始化失败", e)
             }
         }
     }
@@ -108,7 +149,6 @@ fun CameraContent(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // 相机预览区域
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -125,33 +165,7 @@ fun CameraContent(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // 分析指示器
-                if (state.isAnalyzing) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.5f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                strokeWidth = 3.dp
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "分析中...",
-                                color = Color.White,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-                }
-
-                // 如果没有检测到面部
-                if (!state.hasFaceDetected && !state.isAnalyzing) {
+                if (!state.hasFaceDetected) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(16.dp)
@@ -177,7 +191,6 @@ fun CameraContent(
                 }
             }
 
-            // 分析结果区域
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -185,7 +198,6 @@ fun CameraContent(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 心理状态卡片
                 item {
                     MentalStateCard(
                         mentalState = mentalState,
@@ -193,7 +205,6 @@ fun CameraContent(
                     )
                 }
 
-                // 实时表情卡片
                 item {
                     RealTimeExpressionCard(
                         latestExpression = expressions.lastOrNull(),
@@ -201,12 +212,10 @@ fun CameraContent(
                     )
                 }
 
-                // 建议卡片
                 item {
                     RecommendationsCard(recommendations = mentalState.recommendations)
                 }
 
-                // 历史记录标题
                 if (expressions.isNotEmpty()) {
                     item {
                         Text(
@@ -225,36 +234,8 @@ fun CameraContent(
         }
     }
 
-    // 初始化相机（简化版）
     LaunchedEffect(Unit) {
-        try {
-            val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-            cameraProviderFuture.addListener({
-                try {
-                    val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build()
-
-                    previewView?.let { pv ->
-                        preview.setSurfaceProvider(pv.surfaceProvider)
-
-                        val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
-
-                        cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            cameraSelector,
-                            preview
-                        )
-
-                        viewModel.startCamera()
-                    }
-                } catch (e: Exception) {
-                    Log.e("CameraScreen", "相机初始化失败", e)
-                }
-            }, ContextCompat.getMainExecutor(context))
-        } catch (e: Exception) {
-            Log.e("CameraScreen", "无法获取相机提供者", e)
-        }
+        viewModel.startCamera()
     }
 }
 
@@ -282,7 +263,6 @@ fun MentalStateCard(
                     fontWeight = FontWeight.Bold
                 )
 
-                // 状态指示器
                 val (color, text) = when (mentalState.overallState) {
                     OverallState.EXCELLENT -> Pair(Color.Green, "优秀")
                     OverallState.GOOD -> Pair(Color(0xFF4CAF50), "良好")
@@ -302,7 +282,6 @@ fun MentalStateCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 指标展示
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -439,8 +418,8 @@ fun RealTimeExpressionCard(
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = when {
-                                latestExpression.smileProbability > 0.7 -> Color.Green
-                                latestExpression.smileProbability > 0.4 -> Color(0xFFFF9800)
+                                latestExpression.smileProbability > 0.7f -> Color.Green
+                                latestExpression.smileProbability > 0.4f -> Color(0xFFFF9800)
                                 else -> Color(0xFFF44336)
                             },
                             modifier = Modifier.padding(top = 4.dp)
@@ -450,7 +429,6 @@ fun RealTimeExpressionCard(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 眼睛状态
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
@@ -505,7 +483,7 @@ fun EyeStatusItem(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = if (isOpen) "👁️" else "😴",
+                text = if (isOpen) "👁" else "😴",
                 fontSize = 24.sp
             )
         }

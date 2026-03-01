@@ -4,7 +4,10 @@ from datetime import datetime
 from typing import List, Dict, Tuple, Optional
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
+try:
+    from sentence_transformers import SentenceTransformer
+except ImportError:
+    SentenceTransformer = None
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -18,7 +21,20 @@ try:
 except ImportError:
     chromadb = None
 
-import tiktoken
+try:
+    import tiktoken
+except ImportError:
+    tiktoken = None
+
+# 初始化分词器（用于精确计算 Token）
+try:
+    if tiktoken is not None:
+        _tokenizer = tiktoken.get_encoding("cl100k_base")
+    else:
+        _tokenizer = None
+except Exception:
+    _tokenizer = None
+
 try:
     from markitdown import MarkItDown
 except ImportError:
@@ -33,11 +49,7 @@ from config.settings import (
     CHROMA_TENANT, CHROMA_DATABASE
 )
 
-# 初始化分词器（用于精确计算 Token）
-try:
-    _tokenizer = tiktoken.get_encoding("cl100k_base")
-except Exception:
-    _tokenizer = None
+
 
 def _approx_token_len(text: str) -> int:
     """计算 Token 数量"""
@@ -54,9 +66,7 @@ class DocumentProcessor:
             '.pptx', '.csv', '.html', '.htm', '.xml', '.json', '.rtf', '.epub',
             '.jpg', '.png', '.gif', '.mp3', '.wav', '.m4a'
         ]
-        if MarkItDown is None:
-            raise RuntimeError("MarkItDown 不可用，请检查库版本")
-        self.md_instance = MarkItDown()
+        self.md_instance = MarkItDown() if MarkItDown is not None else None
 
     def _enhanced_pdf_processing(self, path: str) -> str:
         """PDF 增强处理：优先快速抽取可复制文本，失败再回退到 MarkItDown."""
@@ -75,23 +85,26 @@ class DocumentProcessor:
             except Exception as e:
                 print(f"[RAG] PDF 快速提取失败: {e}")
 
-        try:
-            result = self.md_instance.convert(path)
-            return getattr(result, "text_content", "")
-        except Exception as e:
-            print(f"[WARNING] PDF MarkItDown 转换失败 {path}: {e}")
-            return ""
+        if self.md_instance is not None:
+            try:
+                result = self.md_instance.convert(path)
+                return getattr(result, "text_content", "")
+            except Exception as e:
+                print(f"[WARNING] PDF MarkItDown 转换失败 {path}: {e}")
+        return ""
 
     def _convert_to_markdown(self, path: str) -> str:
         """统一文档读取：转换为 Markdown 文本"""
         if not os.path.exists(path): return ""
         ext = os.path.splitext(path)[1].lower()
         if ext == '.pdf': return self._enhanced_pdf_processing(path)
-        try:
-            result = self.md_instance.convert(path)
-            return getattr(result, "text_content", "")
-        except Exception:
-            return ""
+        if self.md_instance is not None:
+            try:
+                result = self.md_instance.convert(path)
+                return getattr(result, "text_content", "")
+            except Exception:
+                return ""
+        return ""
 
     def extract_text_from_file(self, file_path: str) -> str:
         return self._convert_to_markdown(file_path)
@@ -182,11 +195,7 @@ class VectorStore:
     """向量存储和检索系统（ChromaDB 本地持久化模式）"""
 
     def __init__(self, model_name: str = None):
-        if model_name is None:
-            model_name = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models")
-            
-        print(f"[RAG] 正在加载本地向量模型: {model_name}")
-        self.model = SentenceTransformer(model_name)
+        self.model = None
         self.dimension = 768
 
         self._tfidf_vectorizer: Optional[TfidfVectorizer] = None
@@ -194,32 +203,53 @@ class VectorStore:
         self._tfidf_docs: List[str] = []
         self._tfidf_metas: List[Dict] = []
 
-        if chromadb is None: raise RuntimeError("缺少依赖: chromadb")
+        if SentenceTransformer is not None:
+            if model_name is None:
+                model_name = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models")
+                
+            print(f"[RAG] 正在加载本地向量模型: {model_name}")
+            try:
+                self.model = SentenceTransformer(model_name)
+            except Exception as e:
+                print(f"[ERROR] 加载向量模型失败: {e}")
+                self.model = None
 
-        # 使用 config/settings.py 中的统一配置
-        try:
-            self.client = chromadb.HttpClient(
-                host=CHROMA_HOST, 
-                port=CHROMA_PORT, 
-                tenant=CHROMA_TENANT, 
-                database=CHROMA_DATABASE
-            )
-            self.collection = self.client.get_or_create_collection(name=CHROMA_COLLECTION)
-        except Exception as e:
-            print(f"[WARN] 连接 Chroma 失败: {repr(e)}")
+        if chromadb is None:
+            print("[WARN] 缺少依赖: chromadb")
             self.client = self.collection = None
+        else:
+            # 使用 config/settings.py 中的统一配置
+            try:
+                self.client = chromadb.HttpClient(
+                    host=CHROMA_HOST, 
+                    port=CHROMA_PORT, 
+                    tenant=CHROMA_TENANT, 
+                    database=CHROMA_DATABASE
+                )
+                self.collection = self.client.get_or_create_collection(name=CHROMA_COLLECTION)
+            except Exception as e:
+                print(f"[WARN] 连接 Chroma 失败: {repr(e)}")
+                self.client = self.collection = None
 
     def add_documents(self, documents: List[str], metadata: List[Dict] = None):
         """添加文档到向量存储，并同步更新 TF-IDF 索引"""
-        if self.collection is None: raise RuntimeError("Chroma 未连接")
+        if self.collection is None:
+            print("[ERROR] Chroma 未连接，无法添加文档")
+            return
+        if self.model is None:
+            print("[ERROR] 向量模型不可用，无法添加文档")
+            return
         if metadata is None: metadata = [{} for _ in documents]
 
         # 1. 向量化并存入 Chroma
-        embeddings = self.model.encode(documents).tolist()
-        base = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        ids = [f"{base}_{i}" for i in range(len(documents))]
+        try:
+            embeddings = self.model.encode(documents).tolist()
+            base = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            ids = [f"{base}_{i}" for i in range(len(documents))]
 
-        self.collection.add(ids=ids, documents=documents, metadatas=metadata, embeddings=embeddings)
+            self.collection.add(ids=ids, documents=documents, metadatas=metadata, embeddings=embeddings)
+        except Exception as e:
+            print(f"[ERROR] 添加文档失败: {e}")
 
 #         关键对应关系（必须牢记）：
 # 索引位置  self.index 中向量   self.documents  self.metadata
@@ -266,21 +296,25 @@ class VectorStore:
     
     def search(self, query: str, user_id: int, top_k: int = 5) -> List[Tuple[str, float, Dict]]:
         """搜索相关文档（增加 user_id 过滤）"""
-        if self.collection is None: return []
-        query_embedding = self.model.encode([query]).tolist()
-        res = self.collection.query(
-            query_embeddings=query_embedding,
-            n_results=top_k,
-            where={"user_id": user_id},
-            include=["documents", "metadatas", "distances"],
-        )
-        docs = (res.get("documents") or [[]])[0]
-        metas = (res.get("metadatas") or [[]])[0]
-        dists = (res.get("distances") or [[]])[0]
-        results: List[Tuple[str, float, Dict]] = []
-        for doc, meta, dist in zip(docs, metas, dists):
-            results.append((doc, float(-dist), meta or {}))
-        return results
+        if self.collection is None or self.model is None: return []
+        try:
+            query_embedding = self.model.encode([query]).tolist()
+            res = self.collection.query(
+                query_embeddings=query_embedding,
+                n_results=top_k,
+                where={"user_id": user_id},
+                include=["documents", "metadatas", "distances"],
+            )
+            docs = (res.get("documents") or [[]])[0]
+            metas = (res.get("metadatas") or [[]])[0]
+            dists = (res.get("distances") or [[]])[0]
+            results: List[Tuple[str, float, Dict]] = []
+            for doc, meta, dist in zip(docs, metas, dists):
+                results.append((doc, float(-dist), meta or {}))
+            return results
+        except Exception as e:
+            print(f"[ERROR] 搜索失败: {e}")
+            return []
 
 class RAGSystem:
     """RAG系统主类"""
