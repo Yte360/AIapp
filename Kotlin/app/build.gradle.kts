@@ -92,6 +92,9 @@ dependencies {
     // ML Kit Face Detection
     implementation("com.google.mlkit:face-detection:16.1.6")
 
+    // Charts - Vico
+    implementation("com.patrykandpatrick.vico:compose-m3:1.13.1")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

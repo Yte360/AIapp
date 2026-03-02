@@ -17,13 +17,18 @@ except Exception as e:
     print(f"[ERROR] 导入 MinIOStorage 失败: {e}")
     MinIOStorage = None
 
-# 初始化数据库管理器
+# 初始化数据库管理器 - 使用 MySQL
 db_manager = None
 try:
     if DatabaseManager is not None:
-        db_file = os.getenv("SQLITE_DB_FILE") or "chat_app.db"
-        db_manager = DatabaseManager(db_file=db_file)
-        print(f"[INFO] 数据库初始化成功: {db_file}")
+        db_manager = DatabaseManager(
+            host=os.getenv("MYSQL_HOST") or "localhost",
+            port=int(os.getenv("MYSQL_PORT") or 3306),
+            user=os.getenv("MYSQL_USER") or "root",
+            password=os.getenv("MYSQL_PASSWORD") or "123456",
+            database=os.getenv("MYSQL_DATABASE") or "chat_app"
+        )
+        print(f"[INFO] 数据库初始化成功: MySQL {db_manager.host}:{db_manager.port}/{db_manager.database}")
 except Exception as e:
     print(f"[ERROR] 数据库初始化失败: {e}")
     import traceback
