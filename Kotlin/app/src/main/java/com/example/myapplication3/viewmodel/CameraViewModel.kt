@@ -227,10 +227,13 @@ class CameraViewModel : ViewModel() {
         val timeSinceLastSave = if (lastSaveTime > 0) currentTime - lastSaveTime else 0L
         val initialDelay = maxOf(0L, 60000L - timeSinceLastSave)
         
+        android.util.Log.d("CameraViewModel", "启动定时器: initialDelay=$initialDelay, lastSaveTime=$lastSaveTime")
+        
         statusSaveJob = viewModelScope.launch {
             var delayTime = initialDelay
             while (true) {
                 delay(delayTime)
+                android.util.Log.d("CameraViewModel", "定时器触发: recentBuffer.size=${recentBuffer.size}")
                 saveAggregatedStatus()
                 delayTime = 60000L
             }
@@ -243,8 +246,13 @@ class CameraViewModel : ViewModel() {
     }
 
     private fun saveAggregatedStatus() {
-        if (recentBuffer.isEmpty()) return
+        if (recentBuffer.isEmpty()) {
+            android.util.Log.d("CameraViewModel", "saveAggregatedStatus: recentBuffer为空，跳过")
+            return
+        }
 
+        android.util.Log.d("CameraViewModel", "saveAggregatedStatus: 保存数据, bufferSize=${recentBuffer.size}")
+        
         lastSaveTime = System.currentTimeMillis()
 
         val avgFatigue = recentBuffer.map { calculateFatigueFromExpression(it) }.average().toInt()

@@ -37,6 +37,7 @@ import com.example.myapplication3.data.FaceAnalyzer
 import com.example.myapplication3.data.MentalState
 import com.example.myapplication3.data.FaceExpression
 import com.example.myapplication3.data.OverallState
+import com.example.myapplication3.service.FloatingWindowService
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
 import com.google.accompanist.permissions.rememberPermissionState
@@ -46,13 +47,23 @@ import java.util.concurrent.Executors
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun CameraScreen(onBack: () -> Unit) {
+fun CameraScreen(onBack: () -> Unit, enterFloatingMode: Boolean = false, clearDataOnBack: Boolean = true) {
     val context = LocalContext.current
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
 
     when (cameraPermissionState.status) {
         is PermissionStatus.Granted -> {
-            CameraContent(onBack = onBack, context = context)
+            CameraContent(
+                onBack = {
+                    if (FloatingWindowService.isRunning()) {
+                        FloatingWindowService.show(context)
+                    }
+                    onBack()
+                },
+                context = context,
+                enterFloatingMode = enterFloatingMode,
+                clearDataOnBack = clearDataOnBack
+            )
         }
         is PermissionStatus.Denied -> {
             PermissionDeniedScreen(onRequestPermission = { cameraPermissionState.launchPermissionRequest() })
@@ -62,13 +73,14 @@ fun CameraScreen(onBack: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CameraContent(onBack: () -> Unit, context: Context) {
+fun CameraContent(onBack: () -> Unit, context: Context, enterFloatingMode: Boolean = false, clearDataOnBack: Boolean = true) {
     val viewModel: CameraViewModel = viewModel()
     val state by viewModel.state.collectAsState()
     val expressions by viewModel.expressions.collectAsState()
     val mentalState by viewModel.mentalState.collectAsState()
 
     var showAlert by remember { mutableStateOf(false) }
+    var isFloatingMode by remember { mutableStateOf(enterFloatingMode) }
     var previewView: PreviewView? by remember { mutableStateOf(null) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -165,13 +177,21 @@ fun CameraContent(onBack: () -> Unit, context: Context) {
                     title = { Text("表情识别分析") },
                     navigationIcon = {
                         IconButton(onClick = {
-                            viewModel.clearData()
+                            if (clearDataOnBack) {
+                                viewModel.clearData()
+                            }
                             onBack()
                         }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                         }
                     },
                     actions = {
+                        IconButton(onClick = { isFloatingMode = !isFloatingMode }) {
+                            Icon(
+                                if (isFloatingMode) Icons.Default.FullscreenExit else Icons.Default.PictureInPicture,
+                                contentDescription = if (isFloatingMode) "退出悬浮窗" else "悬浮窗模式"
+                            )
+                        }
                         IconButton(onClick = { viewModel.clearData() }) {
                             Icon(Icons.Default.Refresh, contentDescription = "重新开始")
                         }
@@ -188,7 +208,7 @@ fun CameraContent(onBack: () -> Unit, context: Context) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(300.dp)
+                        .height(if (isFloatingMode) 200.dp else 300.dp)
                         .background(Color.Black),
                     contentAlignment = Alignment.Center
                 ) {
@@ -207,17 +227,19 @@ fun CameraContent(onBack: () -> Unit, context: Context) {
                     }
                 }
 
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth().fillMaxHeight(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    item { MentalStateCard(mentalState = mentalState, expressionCount = expressions.size) }
-                    item { RealTimeExpressionCard(latestExpression = expressions.lastOrNull(), hasDetected = state.hasFaceDetected) }
-                    item { RecommendationsCard(recommendations = mentalState.recommendations) }
-                    if (expressions.isNotEmpty()) {
-                        item { Text("最近表情记录", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp)) }
-                        items(expressions.takeLast(5).reversed()) { expression -> ExpressionItem(expression = expression) }
+                if (!isFloatingMode) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        item { MentalStateCard(mentalState = mentalState, expressionCount = expressions.size) }
+                        item { RealTimeExpressionCard(latestExpression = expressions.lastOrNull(), hasDetected = state.hasFaceDetected) }
+                        item { RecommendationsCard(recommendations = mentalState.recommendations) }
+                        if (expressions.isNotEmpty()) {
+                            item { Text("最近表情记录", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp)) }
+                            items(expressions.takeLast(5).reversed()) { expression -> ExpressionItem(expression = expression) }
+                        }
                     }
                 }
             }

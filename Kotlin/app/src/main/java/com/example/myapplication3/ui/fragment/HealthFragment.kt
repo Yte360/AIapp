@@ -27,6 +27,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +39,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.Fragment
+import com.example.myapplication3.service.FloatingWindowService
 import com.example.myapplication3.ui.activity.CameraScreen
 import com.example.myapplication3.ui.activity.HealthDashboardScreen
 
@@ -53,6 +56,10 @@ class HealthFragment : Fragment() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+    }
 }
 
 sealed class HealthScreen {
@@ -65,22 +72,46 @@ sealed class HealthScreen {
 @Composable
 fun HealthMainScreen() {
     var currentScreen by remember { mutableStateOf<HealthScreen>(HealthScreen.Main) }
+    val context = LocalContext.current
+    val activity = context as? com.example.myapplication3.ui.activity.MainTabActivity
 
     when (currentScreen) {
         HealthScreen.Main -> {
             MainContent(
-                onNavigateToCamera = { currentScreen = HealthScreen.Camera },
-                onNavigateToDashboard = { currentScreen = HealthScreen.Dashboard }
+                onNavigateToCamera = {
+                    if (FloatingWindowService.isRunning()) {
+                        FloatingWindowService.hide(context)
+                    }
+                    activity?.setInCameraScreen(true)
+                    currentScreen = HealthScreen.Camera
+                },
+                onNavigateToDashboard = { currentScreen = HealthScreen.Dashboard },
+                context = context
             )
         }
         HealthScreen.Camera -> {
+            val prefs = context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+            val shouldOpenCamera = prefs.getBoolean("open_camera_fullscreen", false)
+            prefs.edit().putBoolean("open_camera_fullscreen", false).apply()
             CameraScreen(
-                onBack = { currentScreen = HealthScreen.Main }
+                onBack = {
+                    if (FloatingWindowService.isRunning()) {
+                        FloatingWindowService.show(context)
+                    }
+                    activity?.setInCameraScreen(false)
+                    currentScreen = HealthScreen.Main
+                },
+                clearDataOnBack = !shouldOpenCamera
             )
         }
         HealthScreen.Dashboard -> {
             HealthDashboardScreen(
-                onBack = { currentScreen = HealthScreen.Main }
+                onBack = {
+                    if (FloatingWindowService.isRunning()) {
+                        FloatingWindowService.show(context)
+                    }
+                    currentScreen = HealthScreen.Main
+                }
             )
         }
     }
@@ -90,8 +121,19 @@ fun HealthMainScreen() {
 @Composable
 fun MainContent(
     onNavigateToCamera: () -> Unit,
-    onNavigateToDashboard: () -> Unit
+    onNavigateToDashboard: () -> Unit,
+    context: android.content.Context
 ) {
+    // 检查是否需要打开 CameraScreen 全屏模式
+    val prefs = context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+    val shouldOpenCamera by remember { mutableStateOf(prefs.getBoolean("open_camera_fullscreen", false)) }
+    
+    LaunchedEffect(shouldOpenCamera) {
+        if (shouldOpenCamera) {
+            prefs.edit().putBoolean("open_camera_fullscreen", false).apply()
+            onNavigateToCamera()
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()

@@ -375,7 +375,7 @@ def get_weekly_report():
 
         today_record = None
         if db_manager:
-            today_records = db_manager.get_health_records(user_id, days=1)
+            today_records = db_manager.get_health_records(user_id, days=2)
             for r in today_records:
                 if r.get('record_date') == today:
                     today_record = r
@@ -388,7 +388,8 @@ def get_weekly_report():
             'emotions': []
         }
         for status in today_statuses:
-            if isinstance(status.get('timestamp'), datetime):
+            ts = status.get('timestamp')
+            if ts:
                 today_data['focus_levels'].append(status.get('focus_level', 5))
                 today_data['fatigue_levels'].append(status.get('fatigue_level', 5))
                 today_data['stress_levels'].append(status.get('stress_level', 5))
@@ -456,7 +457,7 @@ def get_weekly_report():
                         'emotion_counts': emotion_counts
                     })
 
-                    total_study_minutes += 0  # 实时数据无法准确计算学习时长
+                    total_study_minutes += len(today_data['focus_levels'])  # 实时数据：每条记录代表1分钟
                     total_focus += focus_score
                     total_fatigue += fatigue_score
                     total_stress += stress_score
