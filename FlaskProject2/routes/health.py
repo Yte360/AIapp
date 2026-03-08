@@ -6,6 +6,16 @@ from core.clients import db_manager
 
 health_bp = Blueprint('health', __name__, url_prefix='/api/health')
 
+EMOTION_TEXT = {
+    'HAPPY': '开心',
+    'SAD': '难过',
+    'ANGRY': '生气',
+    'SURPRISED': '惊讶',
+    'FEARFUL': '害怕',
+    'DISGUSTED': '厌恶',
+    'NEUTRAL': '平静'
+}
+
 
 def calculate_golden_hour(user_id: int, mode: str = "daily") -> str:
     """计算黄金时段
@@ -66,6 +76,9 @@ def _calculate_weekly_golden_hour(user_id: int) -> str:
         if isinstance(record_date, date) and record_date >= monday and record_date < today:
             gh = record.get('golden_hour')
             if gh:
+                if isinstance(gh, timedelta):
+                    total_seconds = int(gh.total_seconds())
+                    gh = f"{total_seconds // 3600:02d}:{(total_seconds % 3600) // 60:02d}:00"
                 golden_hours.append(gh)
     
     if not golden_hours:
@@ -104,83 +117,6 @@ def _format_golden_hour(hour: int) -> str:
         return f"下午 {hour-12:02d}:00-{next_hour-12:02d}:00"
     else:
         return f"晚上 {hour-12:02d}:00-{next_hour-12:02d}:00"
-
- 
-def _build_trend_prompt(avg_focus, avg_fatigue, avg_stress, days, daily_statuses=None):
-    """构建趋势分析prompt"""
-    emotion_text = {
-        'HAPPY': '开心',
-        'SAD': '难过',
-        'ANGRY': '生气',
-        'SURPRISED': '惊讶',
-        'FEARFUL': '害怕',
-        'DISGUSTED': '厌恶',
-        'NEUTRAL': '平静'
-    }
-
-    daily_summary = ""
-    if daily_statuses:
-        for status in daily_statuses:
-            emotions = status.get('emotion_counts', {})
-            emotion_str = ", ".join([f"{emotion_text.get(em, em)}:{count}次" for em, count in emotions.items()])
-            daily_summary += f"""
-- {status.get('date')}: 专注力{status.get('focus_score')}分, 疲劳{status.get('fatigue_score')}分, 压力{status.get('stress_score')}分, 情绪({emotion_str})"""
-
-    return f"""
-你是一名专为考研学生服务的智能心理教练。请根据以下本周学习数据，生成个性化趋势分析：
-
-【本周数据概览】
-- 统计天数：{days} 天
-- 平均专注力：{avg_focus:.1f}/100
-- 平均疲劳度：{avg_fatigue:.1f}/100
-- 平均压力值：{avg_stress:.1f}/100
-{daily_summary}
-
-请生成一段趋势分析（不超过150字），要求：
-1. 基于真实数据分析本周学习状态
-2. 指出专注力、疲劳、压力的变化趋势
-3. 给出具体改进建议
-4. 语言温暖，专业
-"""
-
-
-def _build_recommendations_prompt(avg_focus, avg_fatigue, avg_stress, days, daily_statuses=None):
-    """构建个性化建议prompt"""
-    emotion_text = {
-        'HAPPY': '开心',
-        'SAD': '难过',
-        'ANGRY': '生气',
-        'SURPRISED': '惊讶',
-        'FEARFUL': '害怕',
-        'DISGUSTED': '厌恶',
-        'NEUTRAL': '平静'
-    }
-
-    daily_summary = ""
-    if daily_statuses:
-        for status in daily_statuses:
-            emotions = status.get('emotion_counts', {})
-            emotion_str = ", ".join([f"{emotion_text.get(em, em)}:{count}次" for em, count in emotions.items()])
-            daily_summary += f"""
-- {status.get('date')}: 专注力{status.get('focus_score')}分, 疲劳{status.get('fatigue_score')}分, 压力{status.get('stress_score')}分, 情绪({emotion_str})"""
-
-    return f"""
-你是一名专为考研学生服务的智能心理教练。请根据以下本周学习数据，生成个性化改进建议：
-
-【本周数据概览】
-- 统计天数：{days} 天
-- 平均专注力：{avg_focus:.1f}/100
-- 平均疲劳度：{avg_fatigue:.1f}/100
-- 平均压力值：{avg_stress:.1f}/100
-{daily_summary}
-
-请生成3-5条具体可执行的改进建议，要求：
-1. 针对本周存在的问题给出具体解决方案
-2. 建议要具体、可执行（如：具体时间、具体方法）
-3. 格式：每条建议一行，用数字开头
-4. 总字数不超过200字
-5. 语言温暖，专业
-"""
 
 
 def call_qwen_api_async(prompt: str, callback):
@@ -437,6 +373,14 @@ def get_weekly_report():
         if db_manager:
             today_statuses = db_manager.get_realtime_status(user_id, 1000, 1)
 
+        today_record = None
+        if db_manager:
+            today_records = db_manager.get_health_records(user_id, days=1)
+            for r in today_records:
+                if r.get('record_date') == today:
+                    today_record = r
+                    break
+
         today_data = {
             'focus_levels': [],
             'fatigue_levels': [],
@@ -463,7 +407,35 @@ def get_weekly_report():
             date_str = current.strftime('%Y-%m-%d')
             
             if current == today:
-                if today_data['focus_levels']:
+                if today_record:
+                    focus_score = min(100, (today_record.get('focus_minutes', 0) / 10) * 10)
+                    fatigue_score = min(100, today_record.get('fatigue_alerts', 0) * 20)
+                    stress_score = int(today_record.get('avg_stress_level', 5) * 10)
+
+                    emotion_data = today_record.get('emotion_data')
+                    if isinstance(emotion_data, str):
+                        try:
+                            emotion_data = json.loads(emotion_data)
+                        except:
+                            emotion_data = {}
+
+                    daily_statuses.append({
+                        'date': date_str,
+                        'focus_score': focus_score,
+                        'fatigue_score': fatigue_score,
+                        'stress_score': stress_score,
+                        'emotion_counts': emotion_data or {}
+                    })
+
+                    total_study_minutes += today_record.get('session_duration', 0) // 60
+                    total_focus += focus_score
+                    total_fatigue += fatigue_score
+                    total_stress += stress_score
+                    valid_days += 1
+
+                    for em, count in (emotion_data or {}).items():
+                        emotion_counts_map[em] = emotion_counts_map.get(em, 0) + count
+                elif today_data['focus_levels']:
                     focus_avg = sum(today_data['focus_levels']) / len(today_data['focus_levels'])
                     fatigue_avg = sum(today_data['fatigue_levels']) / len(today_data['fatigue_levels'])
                     stress_avg = sum(today_data['stress_levels']) / len(today_data['stress_levels'])
@@ -484,7 +456,7 @@ def get_weekly_report():
                         'emotion_counts': emotion_counts
                     })
 
-                    total_study_minutes += len(today_data['focus_levels'])
+                    total_study_minutes += 0  # 实时数据无法准确计算学习时长
                     total_focus += focus_score
                     total_fatigue += fatigue_score
                     total_stress += stress_score
@@ -579,21 +551,11 @@ def generate_trend_analysis(avg_focus, avg_fatigue, avg_stress, days, daily_stat
     if days == 0:
         return "暂无数据，请开始学习以获得个性化分析。"
 
-    emotion_text = {
-        'HAPPY': '开心',
-        'SAD': '难过',
-        'ANGRY': '生气',
-        'SURPRISED': '惊讶',
-        'FEARFUL': '害怕',
-        'DISGUSTED': '厌恶',
-        'NEUTRAL': '平静'
-    }
-
     daily_summary = ""
     if daily_statuses:
         for status in daily_statuses:
             emotions = status.get('emotion_counts', {})
-            emotion_str = ", ".join([f"{emotion_text.get(em, em)}:{count}次" for em, count in emotions.items()])
+            emotion_str = ", ".join([f"{EMOTION_TEXT.get(em, em)}:{count}次" for em, count in emotions.items()])
             daily_summary += f"""
 - {status.get('date')}: 专注力{status.get('focus_score')}分, 疲劳{status.get('fatigue_score')}分, 压力{status.get('stress_score')}分, 情绪({emotion_str})"""
 
@@ -659,21 +621,11 @@ def generate_weekly_recommendations(avg_focus, avg_fatigue, avg_stress, days, da
     if days == 0:
         return "暂无建议，请开始学习以获得个性化建议。"
 
-    emotion_text = {
-        'HAPPY': '开心',
-        'SAD': '难过',
-        'ANGRY': '生气',
-        'SURPRISED': '惊讶',
-        'FEARFUL': '害怕',
-        'DISGUSTED': '厌恶',
-        'NEUTRAL': '平静'
-    }
-
     daily_summary = ""
     if daily_statuses:
         for status in daily_statuses:
             emotions = status.get('emotion_counts', {})
-            emotion_str = ", ".join([f"{emotion_text.get(em, em)}:{count}次" for em, count in emotions.items()])
+            emotion_str = ", ".join([f"{EMOTION_TEXT.get(em, em)}:{count}次" for em, count in emotions.items()])
             daily_summary += f"""
 - {status.get('date')}: 专注力{status.get('focus_score')}分, 疲劳{status.get('fatigue_score')}分, 压力{status.get('stress_score')}分, 情绪({emotion_str})"""
 
@@ -757,17 +709,7 @@ def analyze_health():
         fatigue_alerts = data.get('fatigue_alerts', 0)
         emotion_history = data.get('emotion_history', [])
 
-        emotion_text = {
-            'HAPPY': '开心',
-            'SAD': '难过/疲劳',
-            'ANGRY': '生气',
-            'SURPRISED': '惊讶',
-            'FEARFUL': '害怕',
-            'DISGUSTED': '厌恶',
-            'NEUTRAL': '平静'
-        }
-
-        emotion_name = emotion_text.get(current_emotion, current_emotion)
+        emotion_name = EMOTION_TEXT.get(current_emotion, current_emotion)
 
         prompt = f"""
 你是一名专为考研学生服务的智能心理教练。请根据以下数据，为用户提供个性化调节建议：

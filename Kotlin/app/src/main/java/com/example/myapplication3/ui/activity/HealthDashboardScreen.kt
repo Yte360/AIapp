@@ -171,13 +171,13 @@ fun TodayOverviewTab(realtimeStatuses: List<RealtimeStatus>, fatigueAlertCount: 
 
 @Composable
 fun StatusRadarCard(realtimeStatuses: List<RealtimeStatus>) {
-    val avgFocus = if (realtimeStatuses.isNotEmpty()) realtimeStatuses.map { it.focusLevel }.average().toInt() * 10 else 75
-    val avgEnergy = if (realtimeStatuses.isNotEmpty()) (10 - realtimeStatuses.map { it.fatigueLevel }.average()).toInt() * 10 else 60
+    val avgFocus = if (realtimeStatuses.isNotEmpty()) realtimeStatuses.map { it.focusLevel }.average().toInt() * 10 else 0
+    val avgEnergy = if (realtimeStatuses.isNotEmpty()) (10 - realtimeStatuses.map { it.fatigueLevel }.average()).toInt() * 10 else 0
     val avgEmotion = if (realtimeStatuses.isNotEmpty()) {
         val happyCount = realtimeStatuses.count { it.currentEmotion == "HAPPY" }
-        (happyCount * 100 / realtimeStatuses.size).coerceIn(20, 100)
-    } else 80
-    val avgEfficiency = if (realtimeStatuses.isNotEmpty()) realtimeStatuses.map { it.focusLevel }.average().toInt() * 10 else 70
+        (happyCount * 100 / realtimeStatuses.size).coerceIn(0, 100)
+    } else 0
+    val avgEfficiency = if (realtimeStatuses.isNotEmpty()) realtimeStatuses.map { it.focusLevel }.average().toInt() * 10 else 0
 
     Card(
         modifier = Modifier.fillMaxWidth(),

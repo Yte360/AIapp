@@ -332,6 +332,11 @@ class DatabaseManager:
                 """
                 cursor.execute(sql, (user_id, days))
                 results = cursor.fetchall()
+                for r in results:
+                    if r.get('golden_hour'):
+                        if isinstance(r['golden_hour'], timedelta):
+                            total_seconds = int(r['golden_hour'].total_seconds())
+                            r['golden_hour'] = f"{total_seconds // 3600:02d}:{(total_seconds % 3600) // 60:02d}:00"
                 return results
         finally:
             conn.close()
@@ -377,6 +382,13 @@ class DatabaseManager:
                     """
                     cursor.execute(sql, (user_id, limit))
                 results = cursor.fetchall()
+                for r in results:
+                    if r.get('timestamp'):
+                        if isinstance(r['timestamp'], timedelta):
+                            total_seconds = int(r['timestamp'].total_seconds())
+                            r['timestamp'] = f"{total_seconds // 3600:02d}:{(total_seconds % 3600) // 60:02d}:{total_seconds % 60:02d}"
+                        else:
+                            r['timestamp'] = r['timestamp'].isoformat()
                 return results
         finally:
             conn.close()
@@ -394,6 +406,13 @@ class DatabaseManager:
                 """
                 cursor.execute(sql, (user_id,))
                 results = cursor.fetchall()
+                for r in results:
+                    if r.get('timestamp'):
+                        if isinstance(r['timestamp'], timedelta):
+                            total_seconds = int(r['timestamp'].total_seconds())
+                            r['timestamp'] = f"{total_seconds // 3600:02d}:{(total_seconds % 3600) // 60:02d}:{total_seconds % 60:02d}"
+                        else:
+                            r['timestamp'] = r['timestamp'].isoformat()
                 return results
         finally:
             conn.close()
