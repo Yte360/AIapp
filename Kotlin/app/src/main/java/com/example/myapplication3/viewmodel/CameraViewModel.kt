@@ -7,11 +7,13 @@ import com.example.myapplication3.data.FaceExpression
 import com.example.myapplication3.data.HealthRepository
 import com.example.myapplication3.data.MentalState
 import com.example.myapplication3.data.OverallState
+import com.example.myapplication3.data.SharedDataManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 import java.util.*
@@ -23,7 +25,6 @@ data class CameraState(
     val hasFaceDetected: Boolean = false,
     val showFatigueAlert: Boolean = false,
     val fatigueAlerts: Int = 0,
-    val lastFatigueAlertTime: Long = 0,
     val isPaused: Boolean = false,
     val isRequestingAiAnalysis: Boolean = false
 )
@@ -50,9 +51,24 @@ class CameraViewModel : ViewModel() {
     private val healthRepository = HealthRepository()
 
     private var statusSaveJob: kotlinx.coroutines.Job? = null
-    private var lastSaveTime: Long = 0L
 
     private val recentBuffer = mutableListOf<FaceExpression>()
+
+    init {
+        loadFromSharedDataManager()
+    }
+
+    private fun loadFromSharedDataManager() {
+        val sharedExpressions = SharedDataManager.getExpressions()
+        if (sharedExpressions.isNotEmpty()) {
+            _expressions.value = sharedExpressions
+            recentBuffer.clear()
+            recentBuffer.addAll(sharedExpressions.takeLast(10))
+            val newMentalState = analyzeMentalState(sharedExpressions)
+            _mentalState.value = newMentalState
+            android.util.Log.d("CameraViewModel", "从SharedDataManager加载数据: size=${sharedExpressions.size}")
+        }
+    }
 
     // 自定义 Float 闭合区间的 random() 扩展函数
     fun ClosedFloatingPointRange<Float>.random(): Float {
@@ -119,7 +135,9 @@ class CameraViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                val newList = _expressions.value + expression
+                SharedDataManager.addExpression(expression)
+
+                val newList = SharedDataManager.getExpressions()
                 _expressions.value = newList
 
                 recentBuffer.add(expression)
@@ -224,16 +242,19 @@ class CameraViewModel : ViewModel() {
         statusSaveJob?.cancel()
         
         val currentTime = System.currentTimeMillis()
-        val timeSinceLastSave = if (lastSaveTime > 0) currentTime - lastSaveTime else 0L
-        val initialDelay = maxOf(0L, 60000L - timeSinceLastSave)
+        val sharedLastSaveTime = SharedDataManager.getLastSaveTime()
+        val timeSinceLastSave = if (sharedLastSaveTime > 0) currentTime - sharedLastSaveTime else 0L
+        val initialDelay = if (timeSinceLastSave < 60000L) 60000L - timeSinceLastSave else 0L
         
-        android.util.Log.d("CameraViewModel", "启动定时器: initialDelay=$initialDelay, lastSaveTime=$lastSaveTime")
+        android.util.Log.d("CameraViewModel", "启动定时器: initialDelay=$initialDelay, sharedLastSaveTime=$sharedLastSaveTime")
         
         statusSaveJob = viewModelScope.launch {
             var delayTime = initialDelay
-            while (true) {
+            while (isActive) {
                 delay(delayTime)
                 android.util.Log.d("CameraViewModel", "定时器触发: recentBuffer.size=${recentBuffer.size}")
+                val now = System.currentTimeMillis()
+                SharedDataManager.setLastSaveTime(now)
                 saveAggregatedStatus()
                 delayTime = 60000L
             }
@@ -252,8 +273,6 @@ class CameraViewModel : ViewModel() {
         }
 
         android.util.Log.d("CameraViewModel", "saveAggregatedStatus: 保存数据, bufferSize=${recentBuffer.size}")
-        
-        lastSaveTime = System.currentTimeMillis()
 
         val avgFatigue = recentBuffer.map { calculateFatigueFromExpression(it) }.average().toInt()
         val avgFocus = recentBuffer.map { calculateFocusFromExpression(it) }.average().toInt()
@@ -308,6 +327,8 @@ class CameraViewModel : ViewModel() {
     fun clearData() {
         stopStatusSaveTimer()
         recentBuffer.clear()
+        SharedDataManager.clear()
+        SharedDataManager.setLastSaveTime(0L)
         _expressions.value = emptyList()
         _mentalState.value = MentalState(
             fatigueLevel = 5,
@@ -321,7 +342,6 @@ class CameraViewModel : ViewModel() {
                 hasFaceDetected = false,
                 showFatigueAlert = false,
                 fatigueAlerts = 0,
-                lastFatigueAlertTime = 0,
                 isPaused = false,
                 isRequestingAiAnalysis = false
             )
@@ -336,17 +356,18 @@ class CameraViewModel : ViewModel() {
         stopStatusSaveTimer()
 
         val currentTime = System.currentTimeMillis()
-        val lastAlertTime = _state.value.lastFatigueAlertTime
+        val lastAlertTime = SharedDataManager.getLastFatigueAlertTime()
 
         if (lastAlertTime > 0 && currentTime - lastAlertTime < 180000) {
             return
         }
 
+        SharedDataManager.setLastFatigueAlertTime(currentTime)
+
         _state.update {
             it.copy(
                 isPaused = true,
                 fatigueAlerts = it.fatigueAlerts + 1,
-                lastFatigueAlertTime = currentTime,
                 isRequestingAiAnalysis = true
             )
         }
@@ -376,11 +397,11 @@ class CameraViewModel : ViewModel() {
 
     fun dismissFatigueAlert(isExit: Boolean = false) {
         if (isExit) {
+            SharedDataManager.resetFatigueAlertTime()
             _state.update {
                 it.copy(
                     showFatigueAlert = false,
                     isPaused = false,
-                    lastFatigueAlertTime = 0,
                     isRequestingAiAnalysis = false
                 )
             }

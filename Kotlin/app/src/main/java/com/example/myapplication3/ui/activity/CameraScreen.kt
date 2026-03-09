@@ -1,6 +1,7 @@
 package com.example.myapplication3.ui.activity
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.util.Log
 import androidx.camera.core.CameraSelector
@@ -37,6 +38,7 @@ import com.example.myapplication3.data.FaceAnalyzer
 import com.example.myapplication3.data.MentalState
 import com.example.myapplication3.data.FaceExpression
 import com.example.myapplication3.data.OverallState
+import com.example.myapplication3.data.SharedDataManager
 import com.example.myapplication3.service.FloatingWindowService
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionStatus
@@ -45,15 +47,18 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
 
+private fun Context.findActivity(): Activity? = this as? Activity
+
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun CameraScreen(onBack: () -> Unit, enterFloatingMode: Boolean = false, clearDataOnBack: Boolean = true) {
+fun CameraScreen(viewModel: CameraViewModel? = null, onBack: () -> Unit, enterFloatingMode: Boolean = false, clearDataOnBack: Boolean = true) {
     val context = LocalContext.current
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
 
     when (cameraPermissionState.status) {
         is PermissionStatus.Granted -> {
             CameraContent(
+                viewModel = viewModel,
                 onBack = {
                     if (FloatingWindowService.isRunning()) {
                         FloatingWindowService.show(context)
@@ -73,11 +78,11 @@ fun CameraScreen(onBack: () -> Unit, enterFloatingMode: Boolean = false, clearDa
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CameraContent(onBack: () -> Unit, context: Context, enterFloatingMode: Boolean = false, clearDataOnBack: Boolean = true) {
-    val viewModel: CameraViewModel = viewModel()
-    val state by viewModel.state.collectAsState()
-    val expressions by viewModel.expressions.collectAsState()
-    val mentalState by viewModel.mentalState.collectAsState()
+fun CameraContent(viewModel: CameraViewModel? = null, onBack: () -> Unit, context: Context, enterFloatingMode: Boolean = false, clearDataOnBack: Boolean = true) {
+    val vm = viewModel ?: viewModel<CameraViewModel>()
+    val state by vm.state.collectAsState()
+    val expressions by SharedDataManager.recentExpressions.collectAsState()
+    val mentalState by vm.mentalState.collectAsState()
 
     var showAlert by remember { mutableStateOf(false) }
     var isFloatingMode by remember { mutableStateOf(enterFloatingMode) }
@@ -128,9 +133,9 @@ fun CameraContent(onBack: () -> Unit, context: Context, enterFloatingMode: Boole
 
                     val faceAnalyzer = FaceAnalyzer(
                         context = context,
-                        onFaceDetected = { expression -> viewModel.onFaceDetected(expression) },
-                        onNoFaceDetected = { viewModel.onNoFaceDetected() },
-                        onFatigueAlert = { viewModel.onFatigueAlert() },
+                        onFaceDetected = { expression -> vm.onFaceDetected(expression) },
+                        onNoFaceDetected = { vm.onNoFaceDetected() },
+                        onFatigueAlert = { vm.onFatigueAlert() },
                         onVibration = {
                             Log.d("CameraScreen", "收到震动回调")
                             try {
@@ -166,36 +171,41 @@ fun CameraContent(onBack: () -> Unit, context: Context, enterFloatingMode: Boole
     }
 
     LaunchedEffect(Unit) {
-        viewModel.startCamera()
+        vm.startCamera()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.statusBarsPadding(),
+            containerColor = Color(0xFFE3F2FD),
             topBar = {
                 TopAppBar(
-                    title = { Text("表情识别分析") },
+                    title = { Text("表情识别分析", fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = {
                             if (clearDataOnBack) {
-                                viewModel.clearData()
+                                vm.clearData()
                             }
                             onBack()
                         }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                            Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = Color(0xFF1976D2))
                         }
                     },
                     actions = {
                         IconButton(onClick = { isFloatingMode = !isFloatingMode }) {
                             Icon(
                                 if (isFloatingMode) Icons.Default.FullscreenExit else Icons.Default.PictureInPicture,
-                                contentDescription = if (isFloatingMode) "退出悬浮窗" else "悬浮窗模式"
+                                contentDescription = if (isFloatingMode) "退出悬浮窗" else "悬浮窗模式",
+                                tint = Color(0xFF1976D2)
                             )
                         }
-                        IconButton(onClick = { viewModel.clearData() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "重新开始")
+                        IconButton(onClick = { vm.clearData() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "重新开始", tint = Color(0xFF1976D2))
                         }
-                    }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.White
+                    )
                 )
             }
         ) { paddingValues ->
@@ -229,15 +239,18 @@ fun CameraContent(onBack: () -> Unit, context: Context, enterFloatingMode: Boole
 
                 if (!isFloatingMode) {
                     LazyColumn(
-                        modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                            .background(Color(0xFFE3F2FD)),
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        item { MentalStateCard(mentalState = mentalState, expressionCount = expressions.size) }
+                        item { MentalStateCard(mentalState = mentalState, expressionCount = SharedDataManager.size()) }
                         item { RealTimeExpressionCard(latestExpression = expressions.lastOrNull(), hasDetected = state.hasFaceDetected) }
                         item { RecommendationsCard(recommendations = mentalState.recommendations) }
                         if (expressions.isNotEmpty()) {
-                            item { Text("最近表情记录", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp)) }
+                            item { Text("最近表情记录", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF333333), modifier = Modifier.padding(vertical = 8.dp)) }
                             items(expressions.takeLast(5).reversed()) { expression -> ExpressionItem(expression = expression) }
                         }
                     }
@@ -250,11 +263,13 @@ fun CameraContent(onBack: () -> Unit, context: Context, enterFloatingMode: Boole
             FatigueAlertDialog(
                 aiSuggestion = mentalState.aiSuggestion,
                 onContinue = {
-                    viewModel.dismissFatigueAlert(isExit = false)
+                    vm.dismissFatigueAlert(isExit = false)
                 },
                 onExit = {
-                    viewModel.clearData()
-                    onBack()
+                    vm.clearData()
+                    val activity = context as? Activity
+                    activity?.finishAffinity()
+                    android.os.Process.killProcess(android.os.Process.myPid())
                 }
             )
         }
@@ -263,28 +278,65 @@ fun CameraContent(onBack: () -> Unit, context: Context, enterFloatingMode: Boole
 
 @Composable
 fun MentalStateCard(mentalState: MentalState, expressionCount: Int) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
-        Column(modifier = Modifier.padding(16.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("学习状态分析", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF2196F3)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Psychology,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("学习状态分析", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF333333))
+                }
                 val (color, text) = when (mentalState.overallState) {
-                    OverallState.EXCELLENT -> Pair(Color.Green, "优秀")
+                    OverallState.EXCELLENT -> Pair(Color(0xFF2196F3), "优秀")
                     OverallState.GOOD -> Pair(Color(0xFF4CAF50), "良好")
                     OverallState.FAIR -> Pair(Color(0xFFFF9800), "一般")
                     OverallState.POOR -> Pair(Color(0xFFF44336), "需改善")
                 }
-                Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = 0.2f)).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    Text(text, color = color, fontWeight = FontWeight.Bold)
+                Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = 0.15f)).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    Text(text, color = color, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                IndicatorItem("疲劳度", mentalState.fatigueLevel, when { mentalState.fatigueLevel > 7 -> Color(0xFFF44336); mentalState.fatigueLevel > 5 -> Color(0xFFFF9800); else -> Color(0xFF4CAF50) })
-                IndicatorItem("专注度", mentalState.focusLevel, when { mentalState.focusLevel > 7 -> Color(0xFF4CAF50); mentalState.focusLevel > 5 -> Color(0xFFFF9800); else -> Color(0xFFF44336) })
-                IndicatorItem("压力值", mentalState.stressLevel, when { mentalState.stressLevel > 7 -> Color(0xFFF44336); mentalState.stressLevel > 5 -> Color(0xFFFF9800); else -> Color(0xFF4CAF50) })
+            Spacer(modifier = Modifier.height(20.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                IndicatorItem("疲劳度", mentalState.fatigueLevel, when { mentalState.fatigueLevel > 7 -> Color(0xFFF44336); mentalState.fatigueLevel > 5 -> Color(0xFFFF9800); else -> Color(0xFF2196F3) })
+                IndicatorItem("专注度", mentalState.focusLevel, when { mentalState.focusLevel > 7 -> Color(0xFF2196F3); mentalState.focusLevel > 5 -> Color(0xFFFF9800); else -> Color(0xFFF44336) })
+                IndicatorItem("压力值", mentalState.stressLevel, when { mentalState.stressLevel > 7 -> Color(0xFFF44336); mentalState.stressLevel > 5 -> Color(0xFFFF9800); else -> Color(0xFF2196F3) })
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("已分析 $expressionCount 次表情", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = Color(0xFFE3F2FD))
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Analytics,
+                    contentDescription = null,
+                    tint = Color(0xFF1976D2),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("已分析 $expressionCount 次表情", fontSize = 13.sp, color = Color(0xFF666666))
+            }
         }
     }
 }
@@ -292,44 +344,105 @@ fun MentalStateCard(mentalState: MentalState, expressionCount: Int) {
 @Composable
 fun IndicatorItem(label: String, value: Int, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(modifier = Modifier.size(64.dp).clip(CircleShape).background(color.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("$value", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = color)
+                Text("$value", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = color)
                 Text("/10", fontSize = 12.sp, color = color.copy(alpha = 0.7f))
             }
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(label, fontSize = 13.sp, color = Color(0xFF666666))
     }
 }
 
 @Composable
 fun RealTimeExpressionCard(latestExpression: FaceExpression?, hasDetected: Boolean) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("实时表情", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF2196F3)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Face,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("实时表情", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF333333))
+            }
+            
             if (hasDetected && latestExpression != null) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Column {
-                        Text("情绪状态", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("${latestExpression.getEmoji()} ${latestExpression.getEmotionText()}", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+                        Text("情绪状态", fontSize = 12.sp, color = Color(0xFF888888))
+                        Text(
+                            "${latestExpression.getEmoji()} ${latestExpression.getEmotionText()}", 
+                            fontSize = 22.sp, 
+                            fontWeight = FontWeight.Bold, 
+                            modifier = Modifier.padding(top = 4.dp),
+                            color = Color(0xFF333333)
+                        )
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("微笑程度", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("${(latestExpression.smileProbability * 100).toInt()}%", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = when { latestExpression.smileProbability > 0.7f -> Color.Green; latestExpression.smileProbability > 0.4f -> Color(0xFFFF9800); else -> Color(0xFFF44336) }, modifier = Modifier.padding(top = 4.dp))
+                        Text("微笑程度", fontSize = 12.sp, color = Color(0xFF888888))
+                        Text(
+                            "${(latestExpression.smileProbability * 100).toInt()}%", 
+                            fontSize = 22.sp, 
+                            fontWeight = FontWeight.Bold, 
+                            color = when { 
+                                latestExpression.smileProbability > 0.7f -> Color(0xFF2196F3)
+                                latestExpression.smileProbability > 0.4f -> Color(0xFFFF9800)
+                                else -> Color(0xFFF44336)
+                            }, 
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
                     }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     EyeStatusItem("左眼", latestExpression.leftEyeOpenProbability > 0.5f)
                     EyeStatusItem("右眼", latestExpression.rightEyeOpenProbability > 0.5f)
                 }
             } else {
-                Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFF5F5F5)),
+                    contentAlignment = Alignment.Center
+                ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Face, contentDescription = "未检测到面部", modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(
+                            Icons.Default.Face, 
+                            contentDescription = "未检测到面部", 
+                            modifier = Modifier.size(40.dp), 
+                            tint = Color(0xFFBDBDBD)
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("等待检测面部...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("等待检测面部...", color = Color(0xFF888888), fontSize = 14.sp)
                     }
                 }
             }
@@ -340,31 +453,80 @@ fun RealTimeExpressionCard(latestExpression: FaceExpression?, hasDetected: Boole
 @Composable
 fun EyeStatusItem(label: String, isOpen: Boolean) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(modifier = Modifier.size(56.dp).clip(CircleShape).background(if (isOpen) Color(0xFFE8F5E9) else Color(0xFFFFEBEE)), contentAlignment = Alignment.Center) {
-            Text(if (isOpen) "👁" else "😴", fontSize = 24.sp)
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(if (isOpen) Color(0xFFE3F2FD) else Color(0xFFFFEBEE)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(if (isOpen) "👁" else "😴", fontSize = 28.sp)
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(if (isOpen) "睁开" else "闭合", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(label, fontSize = 13.sp, color = Color(0xFF666666))
+        Text(
+            if (isOpen) "睁开" else "闭合", 
+            fontSize = 13.sp, 
+            fontWeight = FontWeight.Bold,
+            color = if (isOpen) Color(0xFF2196F3) else Color(0xFFF44336)
+        )
     }
 }
 
 @Composable
 fun RecommendationsCard(recommendations: List<String>) {
     if (recommendations.isEmpty()) return
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
-                Icon(Icons.Default.Lightbulb, contentDescription = "建议", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("学习建议", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF2196F3)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lightbulb,
+                        contentDescription = "建议",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("学习建议", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF333333))
             }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                recommendations.forEach { text ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Circle, contentDescription = null, modifier = Modifier.size(8.dp), tint = MaterialTheme.colorScheme.primary)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                recommendations.forEachIndexed { index, text ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFF5F5F5))
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF2196F3)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "${index + 1}",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(text, fontSize = 14.sp, modifier = Modifier.fillMaxWidth())
+                        Text(text, fontSize = 14.sp, modifier = Modifier.weight(1f), color = Color(0xFF555555))
                     }
                 }
             }
@@ -374,15 +536,41 @@ fun RecommendationsCard(recommendations: List<String>) {
 
 @Composable
 fun AISuggestionCard(suggestion: String) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))) {
-        Column(modifier = Modifier.padding(16.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Psychology, contentDescription = "AI分析", tint = Color(0xFF4CAF50))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("AI 智能分析", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF2196F3)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Psychology,
+                        contentDescription = "AI分析",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("AI 智能分析", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF333333))
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(suggestion, fontSize = 14.sp, lineHeight = 22.sp)
+            Spacer(modifier = Modifier.height(16.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFE3F2FD))
+                    .padding(16.dp)
+            ) {
+                Text(suggestion, fontSize = 14.sp, lineHeight = 22.sp, color = Color(0xFF444444))
+            }
         }
     }
 }
@@ -390,17 +578,39 @@ fun AISuggestionCard(suggestion: String) {
 @Composable
 fun FatigueAlertDialog(aiSuggestion: String?, onContinue: () -> Unit, onExit: () -> Unit) {
     Dialog(onDismissRequest = { }) {
-        Card(modifier = Modifier.fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(16.dp)) {
-            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.Warning, contentDescription = "警告", tint = Color.Red, modifier = Modifier.size(48.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("⚠️", fontSize = 36.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("检测到疲劳！", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF44336))
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("检测到疲劳！", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Red)
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(if (aiSuggestion != null && aiSuggestion.isNotBlank()) aiSuggestion else "您似乎已经很疲劳了，建议立即休息一下。\n\n长时间疲劳学习会降低效率，请照顾好自己的身体！", fontSize = 14.sp, lineHeight = 22.sp, modifier = Modifier.fillMaxWidth())
+                Text(
+                    if (aiSuggestion != null && aiSuggestion.isNotBlank()) aiSuggestion else "您似乎已经很疲劳了，建议立即休息一下。\n\n长时间疲劳学习会降低效率，请照顾好自己的身体！",
+                    fontSize = 14.sp,
+                    lineHeight = 22.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFF333333)
+                )
                 Spacer(modifier = Modifier.height(24.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    TextButton(onClick = onContinue) { Text("继续学习", color = Color.Gray, fontSize = 16.sp) }
-                    TextButton(onClick = onExit) { Text("退出休息", color = Color(0xFF4CAF50), fontSize = 16.sp) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    TextButton(onClick = onContinue) {
+                        Text("继续学习", color = Color.Gray, fontSize = 16.sp)
+                    }
+                    Spacer(modifier = Modifier.width(32.dp))
+                    TextButton(onClick = onExit) {
+                        Text("退出休息", color = Color(0xFF4CAF50), fontSize = 16.sp)
+                    }
                 }
             }
         }
@@ -409,15 +619,33 @@ fun FatigueAlertDialog(aiSuggestion: String?, onContinue: () -> Unit, onExit: ()
 
 @Composable
 fun ExpressionItem(expression: FaceExpression) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
-        Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(expression.getEmoji(), fontSize = 24.sp, modifier = Modifier.width(40.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(expression.getEmoji(), fontSize = 28.sp, modifier = Modifier.width(40.dp))
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(expression.getEmotionText(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text("微笑: ${(expression.smileProbability * 100).toInt()}%", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(expression.getEmotionText(), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF333333))
+                Text(
+                    "微笑: ${(expression.smileProbability * 100).toInt()}%", 
+                    fontSize = 12.sp, 
+                    color = Color(0xFF888888)
+                )
             }
-            Text(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(expression.timestamp)), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(expression.timestamp)), 
+                fontSize = 12.sp, 
+                color = Color(0xFF888888)
+            )
         }
     }
 }

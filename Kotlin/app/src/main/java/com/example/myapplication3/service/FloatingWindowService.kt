@@ -27,13 +27,17 @@ import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.myapplication3.R
+import com.example.myapplication3.data.FaceAnalyzer
+import com.example.myapplication3.data.FaceExpression
 import com.example.myapplication3.data.HealthRepository
+import com.example.myapplication3.data.SharedDataManager
 import com.example.myapplication3.ui.activity.MainTabActivity
 import kotlinx.coroutines.*
 import androidx.lifecycle.Lifecycle
@@ -55,6 +59,7 @@ class FloatingWindowService : Service(), LifecycleOwner {
         const val ACTION_STOP = "com.example.myapplication3.STOP_FLOATING"
         const val ACTION_SHOW = "com.example.myapplication3.SHOW_FLOATING"
         const val ACTION_HIDE = "com.example.myapplication3.HIDE_FLOATING"
+        const val ACTION_RESTART = "com.example.myapplication3.RESTART_FLOATING"
 
         private var instance: FloatingWindowService? = null
 
@@ -78,10 +83,14 @@ class FloatingWindowService : Service(), LifecycleOwner {
         }
 
         fun show(context: Context) {
-            val intent = Intent(context, FloatingWindowService::class.java).apply {
-                action = ACTION_SHOW
+            if (!isRunning()) {
+                start(context)
+            } else {
+                val intent = Intent(context, FloatingWindowService::class.java).apply {
+                    action = ACTION_RESTART
+                }
+                context.startService(intent)
             }
-            context.startService(intent)
         }
 
         fun hide(context: Context) {
@@ -108,7 +117,6 @@ class FloatingWindowService : Service(), LifecycleOwner {
     private var saveJob: Job? = null
     private var monitorJob: Job? = null
     private var isPaused = false
-    private var lastFatigueAlertTime = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -130,6 +138,8 @@ class FloatingWindowService : Service(), LifecycleOwner {
                 Log.d("FloatingService", "Floating window started for user: $userId")
             }
             ACTION_STOP -> {
+                SharedDataManager.clear()
+                SharedDataManager.setLastSaveTime(0L)
                 hideFloatingWindow()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -137,13 +147,23 @@ class FloatingWindowService : Service(), LifecycleOwner {
             }
             ACTION_SHOW -> {
                 if (floatingView == null) {
+                    isPaused = false
                     showFloatingWindow()
+                    startMonitoring()
                 }
                 Log.d("FloatingService", "Floating window shown")
             }
             ACTION_HIDE -> {
                 hideFloatingWindowOnly()
                 Log.d("FloatingService", "Floating window hidden")
+            }
+            ACTION_RESTART -> {
+                isPaused = false
+                if (floatingView == null) {
+                    showFloatingWindow()
+                    startMonitoring()
+                }
+                Log.d("FloatingService", "Floating window restarted")
             }
         }
         return START_STICKY
@@ -317,6 +337,25 @@ class FloatingWindowService : Service(), LifecycleOwner {
     }
 
     private fun hideFloatingWindowOnly() {
+        saveJob?.cancel()
+        monitorJob?.cancel()
+        
+        try {
+            previewView?.let {
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+                cameraProviderFuture.addListener({
+                    try {
+                        val cameraProvider = cameraProviderFuture.get()
+                        cameraProvider.unbindAll()
+                    } catch (e: Exception) {
+                        Log.e("FloatingService", "Error unbinding camera", e)
+                    }
+                }, ContextCompat.getMainExecutor(this))
+            }
+        } catch (e: Exception) {
+            Log.e("FloatingService", "Error stopping camera", e)
+        }
+        
         floatingView?.let {
             try {
                 windowManager?.removeView(it)
@@ -346,36 +385,115 @@ class FloatingWindowService : Service(), LifecycleOwner {
             it.setSurfaceProvider(previewView?.surfaceProvider)
         }
 
+        val imageAnalysis = ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+
+        val faceAnalyzer = FaceAnalyzer(
+            context = this,
+            onFaceDetected = { expression ->
+                handleFaceDetected(expression)
+            },
+            onNoFaceDetected = { },
+            onFatigueAlert = {
+                if (!isPaused) {
+                    mainHandler.post {
+                        val lastTime = SharedDataManager.getLastFatigueAlertTime()
+                        if (lastTime == 0L || System.currentTimeMillis() - lastTime > 180000) {
+                            SharedDataManager.setLastFatigueAlertTime(System.currentTimeMillis())
+                            isPaused = true
+                            requestAiAnalysisAndShowAlert()
+                        }
+                    }
+                }
+            },
+            onVibration = {
+                try {
+                    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                        vibratorManager.defaultVibrator
+                    } else {
+                        @Suppress("DEPRECATION")
+                        getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && vibrator.hasVibrator()) {
+                        vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        vibrator.vibrate(500)
+                    }
+                } catch (e: Exception) {}
+            }
+        )
+
+        imageAnalysis.setAnalyzer(cameraExecutor, faceAnalyzer)
+
         val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
 
         try {
             cameraProvider.unbindAll()
-            cameraProvider.bindToLifecycle(this, cameraSelector, preview)
+            cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis)
         } catch (e: Exception) {
             Log.e("FloatingService", "Camera binding failed: ${e.message}", e)
         }
     }
 
+    private fun handleFaceDetected(expression: FaceExpression) {
+        if (isPaused) return
+
+        SharedDataManager.addExpression(expression)
+
+        val now = System.currentTimeMillis()
+        val sharedLastSaveTime = SharedDataManager.getLastSaveTime()
+        if (now - sharedLastSaveTime > 60000) {
+            SharedDataManager.setLastSaveTime(now)
+            saveRealtimeStatus()
+        }
+    }
+
+    private fun saveRealtimeStatus() {
+        val recentExpressions = SharedDataManager.getExpressions()
+        if (recentExpressions.isEmpty()) return
+
+        val recent = recentExpressions.takeLast(10)
+        val avgFatigue = 10 - (recent.map { it.eyeOpenness }.average() * 10).toInt().coerceIn(1, 10)
+        val avgFocus = (recent.map { it.eyeOpenness }.average() * 10).toInt().coerceIn(1, 10)
+        val stressLevel = 5
+        val emotion = recent.lastOrNull()?.emotion?.name ?: "NEUTRAL"
+
+        healthRepository.saveRealtimeStatus(
+            userId = userId,
+            fatigueLevel = avgFatigue,
+            focusLevel = avgFocus,
+            stressLevel = stressLevel,
+            currentEmotion = emotion
+        ) { success ->
+            if (success) {
+                Log.d("FloatingService", "Status saved: focus=$avgFocus, fatigue=$avgFatigue")
+            }
+        }
+    }
+
     private fun startMonitoring() {
-        monitorJob?.cancel()
-        monitorJob = serviceScope.launch {
-            while (isActive) {
-                delay(5000)
-                simulateAndSave()
-            }
-        }
-
         saveJob?.cancel()
+        
+        val currentTime = System.currentTimeMillis()
+        val sharedLastSaveTime = SharedDataManager.getLastSaveTime()
+        val lastSave = if (sharedLastSaveTime > 0) sharedLastSaveTime else currentTime
+        val timeSinceLastSave = if (sharedLastSaveTime > 0) currentTime - sharedLastSaveTime else 0L
+        val initialDelay = if (timeSinceLastSave < 60000L) 60000L - timeSinceLastSave else 0L
+        
+        Log.d("FloatingService", "startMonitoring: initialDelay=$initialDelay, sharedLastSaveTime=$sharedLastSaveTime")
+        
         saveJob = serviceScope.launch {
+            var delayTime = initialDelay
             while (isActive) {
-                delay(60000)
-                saveToServer()
+                delay(delayTime)
+                val now = System.currentTimeMillis()
+                SharedDataManager.setLastSaveTime(now)
+                saveRealtimeStatus()
+                delayTime = 60000L
             }
-        }
-
-        serviceScope.launch {
-            delay(1000)
-            simulateAndSave()
         }
     }
 
@@ -390,8 +508,9 @@ class FloatingWindowService : Service(), LifecycleOwner {
 
         if (fatigueLevel >= 7) {
             val now = System.currentTimeMillis()
-            if (lastFatigueAlertTime == 0L || now - lastFatigueAlertTime > 180000) {
-                lastFatigueAlertTime = now
+            val lastTime = SharedDataManager.getLastFatigueAlertTime()
+            if (lastTime == 0L || now - lastTime > 180000) {
+                SharedDataManager.setLastFatigueAlertTime(now)
                 isPaused = true
                 requestAiAnalysisAndShowAlert()
             }
@@ -484,33 +603,19 @@ class FloatingWindowService : Service(), LifecycleOwner {
 
             btnExit.setOnClickListener {
                 isPaused = false
-                lastFatigueAlertTime = 0
+                SharedDataManager.resetFatigueAlertTime()
+                SharedDataManager.clear()
+                SharedDataManager.setLastSaveTime(0L)
                 try {
                     windowManager?.removeView(dialogView)
                 } catch (e: Exception) {}
+                
+                stop(this@FloatingWindowService)
+                
+                android.os.Process.killProcess(android.os.Process.myPid())
             }
         } catch (e: Exception) {
             Log.e("FloatingService", "Error showing fatigue dialog", e)
-        }
-    }
-
-    private fun saveToServer() {
-        val fatigueLevel = (1..9).random()
-        val focusLevel = (3..9).random()
-        val stressLevel = (2..8).random()
-        val emotions = listOf("HAPPY", "NEUTRAL", "SAD", "ANGRY")
-        val emotion = emotions.random()
-
-        healthRepository.saveRealtimeStatus(
-            userId = userId,
-            fatigueLevel = fatigueLevel,
-            focusLevel = focusLevel,
-            stressLevel = stressLevel,
-            currentEmotion = emotion
-        ) { success ->
-            if (success) {
-                Log.d("FloatingService", "Status saved: focus=$focusLevel, fatigue=$fatigueLevel")
-            }
         }
     }
 }

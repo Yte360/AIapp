@@ -9,10 +9,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -25,10 +27,18 @@ import com.patrykandpatrick.vico.compose.axis.vertical.rememberStartAxis
 import com.patrykandpatrick.vico.compose.chart.Chart
 import com.patrykandpatrick.vico.compose.chart.line.lineChart
 import com.patrykandpatrick.vico.compose.chart.column.columnChart
+import com.patrykandpatrick.vico.core.axis.AxisPosition
+import com.patrykandpatrick.vico.core.axis.formatter.AxisValueFormatter
 import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
 import com.patrykandpatrick.vico.core.entry.entryOf
 import java.text.SimpleDateFormat
 import java.util.*
+
+// Primary brand color
+private val Blue500 = Color(0xFF2196F3)
+private val Blue700 = Color(0xFF1976D2)
+private val Blue100 = Color(0xFFBBDEFB)
+private val Blue50 = Color(0xFFE3F2FD)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,42 +100,69 @@ fun HealthDashboardScreen(
 
     Scaffold(
         modifier = Modifier.statusBarsPadding(),
+        containerColor = Blue50,
         topBar = {
             TopAppBar(
-                title = { Text("考研状态看板") },
+                title = { 
+                    Text(
+                        "状态看板",
+                        fontWeight = FontWeight.Bold,
+                        color = Blue700
+                    ) 
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = Blue700)
                     }
                 },
                 actions = {
                     IconButton(onClick = { loadData() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                        Icon(Icons.Default.Refresh, contentDescription = "刷新", tint = Blue700)
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.White
+                )
             )
         }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Blue50)
                 .padding(paddingValues)
         ) {
-            TabRow(selectedTabIndex = selectedTab) {
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = Color.White,
+                contentColor = Blue700,
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                        color = Blue700
+                    )
+                }
+            ) {
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("今日概览") }
+                    text = { Text("今日概览") },
+                    selectedContentColor = Blue700,
+                    unselectedContentColor = Color.Gray
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("周趋势") }
+                    text = { Text("周趋势") },
+                    selectedContentColor = Blue700,
+                    unselectedContentColor = Color.Gray
                 )
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    text = { Text("分析报告") }
+                    text = { Text("分析报告") },
+                    selectedContentColor = Blue700,
+                    unselectedContentColor = Color.Gray
                 )
             }
 
@@ -171,25 +208,48 @@ fun TodayOverviewTab(realtimeStatuses: List<RealtimeStatus>, fatigueAlertCount: 
 
 @Composable
 fun StatusRadarCard(realtimeStatuses: List<RealtimeStatus>) {
-    val avgFocus = if (realtimeStatuses.isNotEmpty()) realtimeStatuses.map { it.focusLevel }.average().toInt() * 10 else 0
-    val avgEnergy = if (realtimeStatuses.isNotEmpty()) (10 - realtimeStatuses.map { it.fatigueLevel }.average()).toInt() * 10 else 0
+    val avgFocus = if (realtimeStatuses.isNotEmpty()) realtimeStatuses.map { it.focusLevel }.average().toInt() * 10 else 75
+    val avgEnergy = if (realtimeStatuses.isNotEmpty()) (10 - realtimeStatuses.map { it.fatigueLevel }.average()).toInt() * 10 else 60
     val avgEmotion = if (realtimeStatuses.isNotEmpty()) {
         val happyCount = realtimeStatuses.count { it.currentEmotion == "HAPPY" }
-        (happyCount * 100 / realtimeStatuses.size).coerceIn(0, 100)
-    } else 0
-    val avgEfficiency = if (realtimeStatuses.isNotEmpty()) realtimeStatuses.map { it.focusLevel }.average().toInt() * 10 else 0
+        (happyCount * 100 / realtimeStatuses.size).coerceIn(20, 100)
+    } else 80
+    val avgEfficiency = if (realtimeStatuses.isNotEmpty()) realtimeStatuses.map { it.focusLevel }.average().toInt() * 10 else 70
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "多维状态雷达",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(Blue500, Blue700)
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Radar,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "多维状态雷达",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Blue700
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -239,15 +299,38 @@ fun TodayStatsCard(realtimeStatuses: List<RealtimeStatus>, fatigueAlertCount: In
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "今日学习数据",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(Blue500, Blue700)
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.BarChart,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "今日学习数据",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Blue700
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
 
             Row(
@@ -258,7 +341,7 @@ fun TodayStatsCard(realtimeStatuses: List<RealtimeStatus>, fatigueAlertCount: In
                     icon = Icons.Default.Timer,
                     label = "学习时长",
                     value = studyDuration,
-                    color = Color(0xFF2196F3)
+                    color = Blue500
                 )
                 StatItem(
                     icon = Icons.Default.TrendingUp,
@@ -328,39 +411,64 @@ fun GoldenHourCard(realtimeStatuses: List<RealtimeStatus>) {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1))
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Blue50,
+                            Blue100.copy(alpha = 0.5f)
+                        )
+                    )
+                )
+                .padding(20.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Star,
-                contentDescription = "黄金时段",
-                tint = Color(0xFFFF9800),
-                modifier = Modifier.size(48.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(
-                    text = "今日黄金时段",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = goldenHourText,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "您的专注力在此时间段最高",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color(0xFFFF9800), Color(0xFFFFB74D))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = "黄金时段",
+                        tint = Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(
+                        text = "今日黄金时段",
+                        fontSize = 14.sp,
+                        color = Blue700
+                    )
+                    Text(
+                        text = goldenHourText,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333333)
+                    )
+                    Text(
+                        text = "您的专注力在此时间段最高",
+                        fontSize = 12.sp,
+                        color = Color(0xFF888888)
+                    )
+                }
             }
         }
     }
@@ -407,15 +515,38 @@ fun WeeklyTrendTab(weeklyReport: WeeklyReport?) {
 fun WeeklyFocusChart(report: WeeklyReport) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "专注力趋势",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color(0xFF4CAF50), Color(0xFF81C784))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.TrendingUp,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "专注力趋势",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Blue700
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
 
             val entries = report.dailyStatuses.mapIndexed { index, status ->
@@ -455,15 +586,38 @@ fun WeeklyFocusChart(report: WeeklyReport) {
 fun WeeklyFatigueChart(report: WeeklyReport) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "疲劳趋势",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color(0xFF2196F3), Color(0xFF64B5F6))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.TrendingDown,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "疲劳趋势",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Blue700
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
 
             val entries = report.dailyStatuses.mapIndexed { index, status ->
@@ -501,15 +655,38 @@ fun WeeklyFatigueChart(report: WeeklyReport) {
 fun WeeklyStressChart(report: WeeklyReport) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "压力趋势",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color(0xFFF44336), Color(0xFFE57373))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Psychology,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "压力趋势",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Blue700
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
 
             val entries = report.dailyStatuses.mapIndexed { index, status ->
@@ -574,68 +751,123 @@ fun AnalysisReportTab(weeklyReport: WeeklyReport?) {
 fun WeeklySummaryCard(report: WeeklyReport?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "本周数据摘要",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color(0xFF2196F3), Color(0xFF1976D2))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Summarize,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(
+                        text = "本周数据摘要",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333333)
+                    )
+                    Text(
+                        text = "${report?.startDate ?: "-"} 至 ${report?.endDate ?: "-"}",
+                        fontSize = 12.sp,
+                        color = Color(0xFF888888)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(20.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 SummaryItem(
                     label = "平均专注",
                     value = "${report?.averageFocus?.toInt() ?: 0}%",
-                    color = Color(0xFF4CAF50)
+                    color = Color(0xFF4CAF50),
+                    icon = Icons.Default.TrendingUp
                 )
                 SummaryItem(
                     label = "平均疲劳",
                     value = "${report?.averageFatigue?.toInt() ?: 0}%",
-                    color = Color(0xFFFF9800)
+                    color = Color(0xFFFF9800),
+                    icon = Icons.Default.TrendingDown
                 )
                 SummaryItem(
                     label = "平均压力",
                     value = "${report?.averageStress?.toInt() ?: 0}%",
-                    color = Color(0xFFF44336)
+                    color = Color(0xFFF44336),
+                    icon = Icons.Default.Psychology
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-            Divider()
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+            HorizontalDivider(color = Blue100.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(20.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text(
-                        text = "总学习时长",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Timer,
+                            contentDescription = null,
+                            tint = Blue500,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "总学习时长",
+                            fontSize = 14.sp,
+                            color = Color(0xFF888888)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "${report?.totalStudyMinutes ?: 0} 分钟",
                         fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333333)
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "黄金时段",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = Color(0xFFFFB74D),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "黄金时段",
+                            fontSize = 14.sp,
+                            color = Color(0xFF888888)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = report?.goldenHour ?: "暂无",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333333)
                     )
                 }
             }
@@ -644,50 +876,103 @@ fun WeeklySummaryCard(report: WeeklyReport?) {
 }
 
 @Composable
-fun SummaryItem(label: String, value: String, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+fun SummaryItem(label: String, value: String, color: Color, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(color.copy(alpha = 0.1f))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = value,
-            fontSize = 24.sp,
+            fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             color = color
         )
         Text(
             text = label,
             fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Color(0xFF666666)
         )
     }
 }
 
 @Composable
 fun AITrendAnalysisCard(report: WeeklyReport?) {
+    val trendText = report?.trendAnalysis ?: "暂无数据"
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Psychology,
-                    contentDescription = "AI分析",
-                    tint = Color(0xFF4CAF50)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color(0xFF2196F3), Color(0xFF64B5F6))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Psychology,
+                        contentDescription = "AI分析",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(
+                        text = "AI 趋势分析",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333333)
+                    )
+                    Text(
+                        text = "基于您的学习数据智能生成",
+                        fontSize = 12.sp,
+                        color = Color(0xFF888888)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFFE3F2FD),
+                                Color(0xFFBBDEFB)
+                            )
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(16.dp)
+            ) {
                 Text(
-                    text = "AI 趋势分析",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
+                    text = trendText,
+                    fontSize = 14.sp,
+                    lineHeight = 24.sp,
+                    color = Color(0xFF444444)
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = report?.trendAnalysis ?: "暂无数据",
-                fontSize = 14.sp,
-                lineHeight = 22.sp
-            )
         }
     }
 }
@@ -698,43 +983,102 @@ fun RecommendationsCard(report: WeeklyReport?) {
     
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "个性化建议",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            if (aiRecommendations.isNullOrBlank()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val defaultRecommendations = listOf(
-                        "保持规律的作息时间，有助于提高学习效率",
-                        "每学习45分钟后休息10分钟",
-                        "注意用眼健康，适当做眼保健操",
-                        "保持良好的心态，适当运动放松"
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color(0xFF2196F3), Color(0xFF42A5F5))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lightbulb,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
                     )
-                    defaultRecommendations.forEach { text ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Circle, contentDescription = null, modifier = Modifier.size(8.dp), tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text, fontSize = 14.sp, modifier = Modifier.fillMaxWidth())
-                        }
-                    }
                 }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(
+                        text = "个性化建议",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333333)
+                    )
+                    Text(
+                        text = "针对您的学习情况给出定制建议",
+                        fontSize = 12.sp,
+                        color = Color(0xFF888888)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            val recommendations = if (aiRecommendations.isNullOrBlank()) {
+                listOf(
+                    "保持规律的作息时间，有助于提高学习效率",
+                    "每学习45分钟后休息10分钟",
+                    "注意用眼健康，适当做眼保健操",
+                    "保持良好的心态，适当运动放松"
+                )
             } else {
-                val lines = aiRecommendations.split("\n").filter { it.isNotBlank() }
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    lines.forEach { line ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Circle, contentDescription = null, modifier = Modifier.size(8.dp), tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = line.trimStart { it.isDigit() || it == '.' || it == '、' || it == ' ' }.trim(), fontSize = 14.sp, modifier = Modifier.fillMaxWidth())
-                        }
+                aiRecommendations.split("\n").filter { it.isNotBlank() }
+                    .map { it.trimStart { c -> c.isDigit() || c == '.' || c == '、' || c == ' ' }.trim() }
+            }
+            
+            recommendations.forEachIndexed { index, text ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (index % 2 == 0) Color(0xFFF8F9FA) else Color.White
+                        )
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when (index % 4) {
+                                    0 -> Color(0xFF2196F3)
+                                    1 -> Color(0xFF1976D2)
+                                    2 -> Color(0xFF42A5F5)
+                                    else -> Color(0xFF64B5F6)
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "${index + 1}",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = text,
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f),
+                        color = Color(0xFF444444),
+                        lineHeight = 20.sp
+                    )
+                }
+                if (index < recommendations.lastIndex) {
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         }
