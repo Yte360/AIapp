@@ -303,7 +303,7 @@ def get_week_trend():
                     'emotion_counts': emotion_data or {}
                 })
 
-                total_study_minutes += record.get('session_duration', 0) // 60
+                total_study_minutes += record.get('session_duration', 0)
                 total_focus += focus_score
                 total_fatigue += fatigue_score
                 total_stress += stress_score
@@ -428,7 +428,7 @@ def get_weekly_report():
                         'emotion_counts': emotion_data or {}
                     })
 
-                    total_study_minutes += today_record.get('session_duration', 0) // 60
+                    total_study_minutes += today_record.get('session_duration', 0)
                     total_focus += focus_score
                     total_fatigue += fatigue_score
                     total_stress += stress_score
@@ -494,7 +494,7 @@ def get_weekly_report():
                     'emotion_counts': emotion_data or {}
                 })
 
-                total_study_minutes += record.get('session_duration', 0) // 60
+                total_study_minutes += record.get('session_duration', 0)
                 total_focus += focus_score
                 total_fatigue += fatigue_score
                 total_stress += stress_score

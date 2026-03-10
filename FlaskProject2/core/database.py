@@ -249,7 +249,7 @@ class DatabaseManager:
 
                 fatigue_sql = """
                     SELECT COUNT(*) as count FROM fatigue_alerts
-                    WHERE user_id = %s AND DATE(created_at) = %s
+                    WHERE user_id = %s AND DATE(timestamp) = %s
                 """
                 cursor.execute(fatigue_sql, (user_id, target_date))
                 fatigue_result = cursor.fetchone()
@@ -291,17 +291,12 @@ class DatabaseManager:
 
                 if result and result['hour'] is not None:
                     best_hour = int(result['hour'])
-                    next_hour = (best_hour + 1) % 24
-                    if best_hour < 12:
-                        return f"{best_hour:02d}:00-{next_hour:02d}:00"
-                    elif best_hour < 18:
-                        return f"{best_hour-12:02d}:00-{next_hour-12:02d}:00"
-                    else:
-                        return f"{best_hour-12:02d}:00-{next_hour-12:02d}:00"
-                return "09:00-11:00"
+                    # 返回 HH:MM:SS 格式
+                    return f"{best_hour:02d}:00:00"
+                return "09:00:00"
         except Exception as e:
             print(f"[ERROR] 计算黄金时段失败: {e}")
-            return "09:00-11:00"
+            return "09:00:00"
         finally:
             conn.close()
 

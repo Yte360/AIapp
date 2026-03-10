@@ -252,10 +252,14 @@ class CameraViewModel : ViewModel() {
             var delayTime = initialDelay
             while (isActive) {
                 delay(delayTime)
-                android.util.Log.d("CameraViewModel", "定时器触发: recentBuffer.size=${recentBuffer.size}")
-                val now = System.currentTimeMillis()
-                SharedDataManager.setLastSaveTime(now)
-                saveAggregatedStatus()
+                if (!SharedDataManager.isSaving()) {
+                    android.util.Log.d("CameraViewModel", "定时器触发: recentBuffer.size=${recentBuffer.size}")
+                    SharedDataManager.setSaving(true)
+                    val now = System.currentTimeMillis()
+                    SharedDataManager.setLastSaveTime(now)
+                    saveAggregatedStatus()
+                    SharedDataManager.setSaving(false)
+                }
                 delayTime = 60000L
             }
         }

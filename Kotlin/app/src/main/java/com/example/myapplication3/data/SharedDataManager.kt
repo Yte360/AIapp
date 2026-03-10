@@ -11,6 +11,7 @@ object SharedDataManager {
     private var _lastFatigueAlertTime: Long = 0L
     private var _fatigueAlertCount: Int = 0
     private var _lastSaveTime: Long = 0L
+    private var _isSaving: Boolean = false
 
     fun addExpression(expression: FaceExpression) {
         val currentList = _recentExpressions.value.toMutableList()
@@ -51,5 +52,11 @@ object SharedDataManager {
 
     fun setLastSaveTime(time: Long) {
         _lastSaveTime = time
+    }
+
+    fun isSaving(): Boolean = _isSaving
+
+    fun setSaving(saving: Boolean) {
+        _isSaving = saving
     }
 }

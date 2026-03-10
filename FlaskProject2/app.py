@@ -48,9 +48,39 @@ def daily_summarize():
         print(f"[定时任务] 汇总失败: {e}")
 
 
+def check_and_run_missed_tasks():
+    """检查并执行错过的定时任务（电脑唤醒后补执行）"""
+    try:
+        from datetime import date, timedelta
+        yesterday = date.today() - timedelta(days=1)
+        
+        if db_manager:
+            user_ids = db_manager.get_all_user_ids()
+            if not user_ids:
+                user_ids = [1]
+            
+            for user_id in user_ids:
+                # 检查昨天是否已经有记录，避免重复插入
+                records = db_manager.get_health_records(user_id, days=7)
+                has_yesterday = any(r.get('record_date') == str(yesterday) for r in records)
+                
+                if not has_yesterday:
+                    db_manager.summarize_daily_data(user_id, yesterday)
+                    print(f"[补执行] 为用户 {user_id} 汇总 {yesterday} 数据")
+                else:
+                    print(f"[补执行] 用户 {user_id} {yesterday} 数据已存在，跳过")
+            
+            print(f"[补执行] 检查完成")
+    except Exception as e:
+        print(f"[补执行] 汇总失败: {e}")
+
+
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=daily_summarize, trigger="cron", hour=0, minute=0)
 scheduler.start()
+
+# 启动时检查并补执行错过的任务
+check_and_run_missed_tasks()
 
 # 确保scheduler在应用退出时正确关闭
 import atexit

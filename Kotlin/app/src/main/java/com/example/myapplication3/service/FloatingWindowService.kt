@@ -445,9 +445,16 @@ class FloatingWindowService : Service(), LifecycleOwner {
 
         val now = System.currentTimeMillis()
         val sharedLastSaveTime = SharedDataManager.getLastSaveTime()
-        if (now - sharedLastSaveTime > 60000) {
+        
+        // 只有当 lastSaveTime > 0 且间隔超过60秒才保存
+        if (sharedLastSaveTime > 0 && now - sharedLastSaveTime > 60000 && !SharedDataManager.isSaving()) {
+            SharedDataManager.setSaving(true)
             SharedDataManager.setLastSaveTime(now)
             saveRealtimeStatus()
+            SharedDataManager.setSaving(false)
+        } else if (sharedLastSaveTime == 0L) {
+            // 首次检测时初始化 lastSaveTime
+            SharedDataManager.setLastSaveTime(now)
         }
     }
 
@@ -489,9 +496,13 @@ class FloatingWindowService : Service(), LifecycleOwner {
             var delayTime = initialDelay
             while (isActive) {
                 delay(delayTime)
-                val now = System.currentTimeMillis()
-                SharedDataManager.setLastSaveTime(now)
-                saveRealtimeStatus()
+                if (!SharedDataManager.isSaving()) {
+                    SharedDataManager.setSaving(true)
+                    val now = System.currentTimeMillis()
+                    SharedDataManager.setLastSaveTime(now)
+                    saveRealtimeStatus()
+                    SharedDataManager.setSaving(false)
+                }
                 delayTime = 60000L
             }
         }
